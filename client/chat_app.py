@@ -39,17 +39,30 @@ from pydantic_ai.messages import (
     TextPart,
     UserPromptPart,
 )
+from pydantic_ai.mcp import MCPServerStreamableHTTP
+
 
 load_dotenv()
 THIS_DIR = Path(__file__).parent
 
-# 'if-token-present' means nothing will be sent (and the example will work) if you don't have logfire configured
-logfire.configure(send_to_logfire="if-token-present", token=os.getenv("LOGFIRE_TOKEN"))
-logfire.instrument_pydantic_ai()
+# ------------------------------------------------------------
+# Logging setup
+logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))  # type: ignore
+logfire.instrument_pydantic_ai()  # type: ignore
+Agent.instrument_all()
+# ------------------------------------------------------------
+
+
+# ------------------------------------------------------------
+# MCP server endpoint setup
+mcp_server_endpoint = os.getenv("MCP_SERVER_ENDPOINT")
+mcp_server = MCPServerStreamableHTTP(mcp_server_endpoint)
+# ------------------------------------------------------------
+
 
 # ------------------------------------------------------------
 # Agent setup
-agent = Agent("openai:gpt-4o")
+agent = Agent("openai:gpt-4o", toolsets=[mcp_server])
 # ------------------------------------------------------------
 
 
@@ -138,12 +151,15 @@ async def post_chat(
         # get the chat history so far to pass as context to the agent
         messages = await database.get_messages()
         # run the agent with the user prompt and the chat history
-        async with agent.run_stream(prompt, message_history=messages) as result:
-            async for text in result.stream(debounce_by=0.01):
-                # text here is a `str` and the frontend wants
-                # JSON encoded ModelResponse, so we create one
-                m = ModelResponse(parts=[TextPart(text)], timestamp=result.timestamp())
-                yield json.dumps(to_chat_message(m)).encode("utf-8") + b"\n"
+        async with agent:
+            async with agent.run_stream(prompt, message_history=messages) as result:
+                async for text in result.stream(debounce_by=0.01):
+                    # text here is a `str` and the frontend wants
+                    # JSON encoded ModelResponse, so we create one
+                    m = ModelResponse(
+                        parts=[TextPart(text)], timestamp=result.timestamp()
+                    )
+                    yield json.dumps(to_chat_message(m)).encode("utf-8") + b"\n"
 
         # add new messages (e.g. the user prompt and the agent response in this case) to the database
         await database.add_messages(result.new_messages_json())
@@ -249,4 +265,4 @@ class Database:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.chat_app:app", reload=True, reload_dirs=[str(THIS_DIR)], port=8022)
+    uvicorn.run("chat_app:app", reload=True, reload_dirs=[str(THIS_DIR)], port=8022)

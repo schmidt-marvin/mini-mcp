@@ -1,1 +1,0 @@
-uv run -m app.chat_app

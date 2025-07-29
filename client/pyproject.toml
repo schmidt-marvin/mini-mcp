@@ -1,0 +1,18 @@
+[project]
+name = "mini-mcp-client"
+version = "0.1.0"
+description = "Mini MCP implementation within pydantic-ai"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic-ai[mcp]>=0.4.9",
+    "openai>=1.97.1",
+    "logfire>=4.0.0",
+    "logfire[fastapi]>=4.0.0",
+    "fastapi[standard]>=0.115.14",
+    "python-dotenv>=1.0.1",
+    "logfire[sqlite3]>=4.0.0",
+]
+
+[tool.uv.workspace]
+members = ["client"]
