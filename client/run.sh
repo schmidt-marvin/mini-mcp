@@ -1,1 +1,1 @@
-uv run -m app.chat_app
+uv run -m chat_app
